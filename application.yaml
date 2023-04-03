@@ -1,0 +1,35 @@
+server:
+  port: 8080
+spring:
+  datasource:
+    username: search_engine
+    password: password
+    url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
+    hikari:
+      transaction-isolation: TRANSACTION_READ_COMMITTED
+      connection-timeout: 120000
+      maximum-pool-size: 40
+      auto-commit: true
+      isolate-internal-queries: true
+
+  jpa:
+    properties:
+      hibernate:
+        current_session_context_class: thread
+        dialect: org.hibernate.dialect.MySQL8Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+indexing-settings:
+  sites:
+    - url: https://www.lenta.ru
+      name: Лента.ру
+    - url: https://www.skillbox.ru
+      name: Skillbox
+    - url: https://www.playback.ru
+      name: PlayBack.Ru
+
+connection-data:
+  user-agent: Mozilla/5.0 (Windows; U; WindowsNT 5.1; en-US; rv1.8.1.6) Gecko/20070725 Firefox/2.0.0.6
+  referrer: https://www.google.com
