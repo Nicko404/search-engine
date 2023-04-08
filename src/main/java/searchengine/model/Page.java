@@ -10,7 +10,7 @@ import javax.persistence.*;
 @Getter
 @Setter
 @Entity
-@Table(name = "page", indexes = @Index(name = "path_index", columnList = "path, site_id", unique = true))
+@Table(name = "page", indexes = @javax.persistence.Index(name = "path_index", columnList = "path, site_id", unique = true))
 @SQLInsert(sql = "insert ignore into page (code, content, path, site_id, id) values (?, ?, ?, ?, ?)")
 @EqualsAndHashCode(exclude = {"content"})
 public class Page {

@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import searchengine.config.SiteParserData;
 import searchengine.config.SitesList;
 import searchengine.dto.indexing.IndexingResponse;
+import searchengine.model.Lemma;
+import searchengine.model.Page;
 import searchengine.model.Site;
 import searchengine.model.SiteStatus;
 import searchengine.repositories.PageRepository;
@@ -45,7 +47,7 @@ public class IndexingServiceImpl implements IndexingService {
         for (searchengine.config.Site siteConf : sites.getSites()) {
             deleteAllSiteData(siteUrlToBaseForm(siteConf.getUrl()));
             ForkJoinPool pool = new ForkJoinPool();
-            SiteParser parser = new SiteParser("", saveSite(siteConf), siteParserData);
+            SiteParser parser = new SiteParser("/", saveSite(siteConf), siteParserData);
             poolParserMap.put(pool, parser);
             pool.execute(parser);
         }
@@ -64,7 +66,7 @@ public class IndexingServiceImpl implements IndexingService {
         }
         indexingStarted = false;
         for (ForkJoinPool pool : new HashSet<>(poolParserMap.keySet())) {
-            pool.shutdownNow();
+            pool.shutdown();
             Site site = poolParserMap.get(pool).getSite();
             siteRepository.update(site, SiteStatus.FAILED, "Индексация остановлена пользователем");
             pageRepository.clearMap(site);
@@ -73,6 +75,46 @@ public class IndexingServiceImpl implements IndexingService {
         service.shutdown();
         response.setResult(true);
         return response;
+    }
+
+    @Override
+    public IndexingResponse indexPage(String url) {
+        IndexingResponse response = new IndexingResponse();
+        searchengine.config.Site siteConf = configContainsUrl(siteUrlToBaseForm(url));
+        if (Objects.nonNull(siteConf)) {
+            url = siteUrlToBaseForm(url);
+            String path = url.substring(siteUrlToBaseForm(siteConf.getUrl()).length());
+            Site site = siteRepository.findByUrl(url.substring(0, url.length() - path.length()));
+            if (Objects.isNull(site)) site = saveSite(siteConf);
+            Page page = pageRepository.findByPathAndSite(path, site);
+            if (Objects.nonNull(page)) {
+                List<Lemma> lemmas = siteParserData.getIndexRepository().deleteByPage(page);
+                lemmas.forEach(lemma -> siteParserData.getLemmaRepository().decrementFrequencyById(lemma.getId()));
+                siteParserData.getLemmaRepository().deleteIfFrequencyIsZero();
+                pageRepository.removeByPathAndSite(path, site);
+                pageRepository.removeFromMap(page);
+            }
+            SiteParser parser = new SiteParser(path, site, siteParserData);
+            if (parser.indexPage()) {
+                response.setResult(true);
+                return response;
+            }
+            response.setResult(false);
+            response.setError("Не удалось проиндексировать страницу");
+        } else {
+            response.setResult(false);
+            response.setError("Данная страница находится за пределами сайтов, " +
+                    "указанных в конфигурационном файле\n");
+        }
+        return response;
+    }
+
+    private searchengine.config.Site configContainsUrl(String url) {
+        for (searchengine.config.Site site : sites.getSites()) {
+            if (url.startsWith(siteUrlToBaseForm(site.getUrl())))
+                return site;
+        }
+        return null;
     }
 
     private Site saveSite(searchengine.config.Site siteConf) {
@@ -91,6 +133,8 @@ public class IndexingServiceImpl implements IndexingService {
     private void deleteAllSiteData(String url) {
         Site site = siteRepository.findByUrl(url);
         if (Objects.nonNull(site)) {
+            siteParserData.getIndexRepository().removeBySite(site);
+            siteParserData.getLemmaRepository().removeBySite(site);
             pageRepository.removeBySite(site);
             siteRepository.remove(site);
         }

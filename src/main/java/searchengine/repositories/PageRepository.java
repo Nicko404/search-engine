@@ -9,7 +9,9 @@ import org.springframework.stereotype.Component;
 import searchengine.model.Page;
 import searchengine.model.Site;
 
+import javax.persistence.NoResultException;
 import javax.persistence.Query;
+import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -26,7 +28,7 @@ public class PageRepository {
         sitePaths = new ConcurrentHashMap<>();
     }
 
-    public boolean savePage(Page page) {
+    public Page savePage(Page page) {
         Set<String> paths;
         if (sitePaths.containsKey(page.getSite())) {
             paths = sitePaths.get(page.getSite());
@@ -39,9 +41,12 @@ public class PageRepository {
             try {
                 session = sessionFactory.openSession();
                 session.beginTransaction();
-                session.persist(page);
+                Serializable serializable = session.save(page);
+                page = session.get(Page.class, serializable);
+//                session.persist(page);
+                session.flush();
                 session.getTransaction().commit();
-                return true;
+                return page;
             } catch (Exception e) {
                 if (Objects.nonNull(session) && Objects.nonNull(session.getTransaction())) {
                     session.getTransaction().rollback();
@@ -53,12 +58,36 @@ public class PageRepository {
                 }
             }
         }
-        return false;
+        return null;
     }
 
     public boolean isPageSaved(String path, Site site) {
         Set<String> paths = sitePaths.get(site);
         return !(Objects.isNull(paths) || !paths.contains(path));
+    }
+
+    public Page findByPathAndSite(String path, Site site) {
+        Page page = null;
+        String sql = "from Page p where p.path = :path and p.site = :site";
+        Session session = null;
+        try {
+            session = sessionFactory.openSession();
+            session.beginTransaction();
+            Query query = session.createQuery(sql);
+            query.setParameter("path", path);
+            query.setParameter("site", site);
+            page = (Page) query.getSingleResult();
+            session.getTransaction().commit();
+        } catch (NoResultException e) {
+            return null;
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (Objects.nonNull(session)) {
+                session.close();
+            }
+        }
+        return page;
     }
 
     public void removeBySite(Site site) {
@@ -83,11 +112,57 @@ public class PageRepository {
         }
     }
 
+    public void removeByPathAndSite(String path, Site site) {
+        String sql = "delete from Page p where p.path = :path and p.site = :site";
+        Session session = null;
+        try {
+            session = sessionFactory.openSession();
+            session.beginTransaction();
+            Query query = session.createQuery(sql);
+            query.setParameter("path", path);
+            query.setParameter("site", site);
+            query.executeUpdate();
+            session.getTransaction().commit();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (Objects.nonNull(session)) {
+                session.close();
+            }
+        }
+    }
+
     public void clearMap(Site site) {
         Set<String> paths = sitePaths.get(site);
         if (Objects.nonNull(paths)) {
             paths.clear();
         }
         sitePaths.remove(site);
+    }
+
+    public void removeFromMap(Page page) {
+        Set<String> paths = sitePaths.get(page.getSite());
+        if (Objects.nonNull(paths)) {
+            paths.remove(page.getPath());
+        }
+    }
+
+    public int count(Site site) {
+        int result = 0;
+        String sql = "select count(*) from Page p where p.site = :site";
+        Session session = null;
+        try {
+            session = sessionFactory.openSession();
+            Query query = session.createQuery(sql);
+            query.setParameter("site", site);
+            result = ((Long) query.getSingleResult()).intValue();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (Objects.nonNull(session)) {
+                session.close();
+            }
+        }
+        return result;
     }
 }

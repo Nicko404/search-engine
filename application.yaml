@@ -5,29 +5,25 @@ spring:
     username: search_engine
     password: password
     url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
-    hikari:
-      transaction-isolation: TRANSACTION_READ_COMMITTED
-      connection-timeout: 120000
-      maximum-pool-size: 40
-      auto-commit: true
-      isolate-internal-queries: true
 
   jpa:
     properties:
       hibernate:
         current_session_context_class: thread
         dialect: org.hibernate.dialect.MySQL8Dialect
+        connection:
+          isolation: TRANSACTION_SERIALIZABLE
     hibernate:
       ddl-auto: update
     show-sql: false
 
 indexing-settings:
   sites:
-    - url: https://www.lenta.ru
+    - url: https://lenta.ru
       name: Лента.ру
-    - url: https://www.skillbox.ru
+    - url: https://skillbox.ru
       name: Skillbox
-    - url: https://www.playback.ru
+    - url: https://playback.ru
       name: PlayBack.Ru
 
 connection-data:

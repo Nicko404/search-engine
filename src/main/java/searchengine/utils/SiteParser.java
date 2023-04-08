@@ -9,9 +9,9 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import searchengine.config.SiteParserData;
-import searchengine.model.Page;
-import searchengine.model.Site;
-import searchengine.model.SiteStatus;
+import searchengine.model.*;
+import searchengine.repositories.IndexRepository;
+import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 import searchengine.services.IndexingServiceImpl;
@@ -19,10 +19,7 @@ import searchengine.services.IndexingServiceImpl;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.RecursiveAction;
 
 @Getter
@@ -32,6 +29,8 @@ public class SiteParser extends RecursiveAction {
     private final Site site;
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
+    private final LemmaRepository lemmaRepository;
+    private final IndexRepository indexRepository;
     private final SiteParserData siteParserData;
     private final String uri;
     private Document document;
@@ -43,6 +42,8 @@ public class SiteParser extends RecursiveAction {
         this.siteParserData = siteParserData;
         this.pageRepository = siteParserData.getPageRepository();
         this.siteRepository = siteParserData.getSiteRepository();
+        this.lemmaRepository = siteParserData.getLemmaRepository();
+        this.indexRepository = siteParserData.getIndexRepository();
         uri = site.getUrl() + path;
     }
 
@@ -50,7 +51,7 @@ public class SiteParser extends RecursiveAction {
     @Override
     protected void compute() {
         if (!IndexingServiceImpl.isIndexingStarted() || pageRepository.isPageSaved(path, site) || !connect()) return;
-        savePage(document.connection().response().statusCode());
+        indexPage();
         Elements aElements = document.getElementsByTag("a");
         document = null;
         List<SiteParser> parsers = new ArrayList<>();
@@ -109,15 +110,39 @@ public class SiteParser extends RecursiveAction {
         return path.startsWith("/") || path.startsWith(site.getUrl());
     }
 
-    private void savePage(int statusCode) {
+    private Page savePage(int statusCode) {
         Page page = new Page();
         page.setSite(site);
-        page.setPath(path);
+        page.setPath(path.length() > 0 ? path : "/");
         page.setCode(statusCode);
         page.setContent(Objects.isNull(document) ? "<Default Content>" : document.text());
-        if (pageRepository.savePage(page)) siteRepository.update(
+        page = pageRepository.savePage(page);
+        if (Objects.nonNull(page)) siteRepository.update(
                 site,
                 IndexingServiceImpl.isIndexingStarted() ? SiteStatus.INDEXING : site.getStatus(),
                 site.getLastError());
+        return page;
+    }
+
+    public boolean indexPage() {
+        if (!connect() && !IndexingServiceImpl.isIndexingStarted()) return false;
+        Page page = savePage(document.connection().response().statusCode());
+        if (Objects.isNull(page)) return false;
+        Lemmatizer lemmatizer = new Lemmatizer();
+        String text = lemmatizer.deleteHtmlTags(document);
+        Map<String, Integer> lemmas = lemmatizer.lemmatize(text);
+        for (String l : lemmas.keySet()) {
+            Lemma lemma = new Lemma();
+            lemma.setSite(site);
+            lemma.setLemma(l);
+            lemma.setFrequency(1);
+            lemmaRepository.save(lemma);
+            Index index = new Index();
+            index.setPage(page);
+            index.setLemma(lemma);
+            index.setRank(lemmas.get(l));
+            indexRepository.save(index);
+        }
+        return true;
     }
 }
