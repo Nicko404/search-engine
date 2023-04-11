@@ -6,6 +6,7 @@ import org.hibernate.annotations.SQLInsert;
 
 import javax.persistence.*;
 import javax.persistence.Index;
+import java.util.Objects;
 
 @Getter
 @Setter
@@ -29,4 +30,17 @@ public class Lemma {
 
     @Column(nullable = false)
     private int frequency;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Lemma lemma1 = (Lemma) o;
+        return frequency == lemma1.frequency && Objects.equals(site, lemma1.site) && Objects.equals(lemma, lemma1.lemma);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(site, lemma, frequency);
+    }
 }

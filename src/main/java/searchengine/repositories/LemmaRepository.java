@@ -3,14 +3,14 @@ package searchengine.repositories;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
-import org.hibernate.query.NativeQuery;
 import org.hibernate.query.Query;
 import org.springframework.stereotype.Repository;
-import searchengine.model.Index;
 import searchengine.model.Lemma;
 import searchengine.model.Site;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 @Repository
 @RequiredArgsConstructor
@@ -35,6 +35,27 @@ public class LemmaRepository {
 
     }
 
+    public List<Lemma> findByLemmaListAndSite(Set<String> queryLemmas, Site site) {
+        List<Lemma> lemmas = null;
+        String sql = Objects.isNull(site) ? "from Lemma l where l.lemma in (:queryLemmas)" :
+                "from Lemma l where l.site = :site and l.lemma in (:queryLemmas)";
+        Session session = null;
+        try {
+            session = sessionFactory.openSession();
+            Query query = session.createQuery(sql);
+            query.setParameterList("queryLemmas", queryLemmas);
+            if (Objects.nonNull(site)) query.setParameter("site", site);
+            lemmas = query.getResultList();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (Objects.nonNull(session)) {
+                session.close();
+            }
+        }
+        return lemmas;
+    }
+
     public void decrementFrequencyById(int id) {
         String sql = "update Lemma l set l.frequency = l.frequency - 1 where l.id = :id";
         Session session = null;
@@ -54,7 +75,7 @@ public class LemmaRepository {
         }
     }
 
-    public void deleteIfFrequencyIsZero() {
+    public void removeIfFrequencyIsZero() {
         Session session = null;
         try {
             session = sessionFactory.openSession();

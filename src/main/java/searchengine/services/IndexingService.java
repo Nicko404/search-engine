@@ -1,6 +1,7 @@
 package searchengine.services;
 
 import searchengine.dto.indexing.IndexingResponse;
+import searchengine.dto.search.SearchResponse;
 
 public interface IndexingService {
 
@@ -8,4 +9,6 @@ public interface IndexingService {
     IndexingResponse stopIndexing();
 
     IndexingResponse indexPage(String url);
+
+    SearchResponse search(String site, String query);
 }

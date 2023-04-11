@@ -115,7 +115,7 @@ public class SiteParser extends RecursiveAction {
         page.setSite(site);
         page.setPath(path.length() > 0 ? path : "/");
         page.setCode(statusCode);
-        page.setContent(Objects.isNull(document) ? "<Default Content>" : document.text());
+        page.setContent(Objects.isNull(document) ? "<Default Content>" : document.toString());
         page = pageRepository.savePage(page);
         if (Objects.nonNull(page)) siteRepository.update(
                 site,
