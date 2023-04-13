@@ -10,15 +10,12 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import searchengine.config.SiteParserData;
 import searchengine.model.*;
-import searchengine.repositories.IndexRepository;
-import searchengine.repositories.LemmaRepository;
-import searchengine.repositories.PageRepository;
-import searchengine.repositories.SiteRepository;
 import searchengine.services.IndexingServiceImpl;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.RecursiveAction;
 
@@ -27,10 +24,6 @@ public class SiteParser extends RecursiveAction {
 
     private final String path;
     private final Site site;
-    private final PageRepository pageRepository;
-    private final SiteRepository siteRepository;
-    private final LemmaRepository lemmaRepository;
-    private final IndexRepository indexRepository;
     private final SiteParserData siteParserData;
     private final String uri;
     private Document document;
@@ -40,18 +33,15 @@ public class SiteParser extends RecursiveAction {
         this.path = path;
         this.site = site;
         this.siteParserData = siteParserData;
-        this.pageRepository = siteParserData.getPageRepository();
-        this.siteRepository = siteParserData.getSiteRepository();
-        this.lemmaRepository = siteParserData.getLemmaRepository();
-        this.indexRepository = siteParserData.getIndexRepository();
         uri = site.getUrl() + path;
     }
 
 
     @Override
     protected void compute() {
-        if (!IndexingServiceImpl.isIndexingStarted() || pageRepository.isPageSaved(path, site) || !connect()) return;
-        indexPage();
+        if (!IndexingServiceImpl.isIndexingStarted() ||
+                siteParserData.getDataSaver().isPageSaved(path, site) ||
+                !indexPage()) return;
         Elements aElements = document.getElementsByTag("a");
         document = null;
         List<SiteParser> parsers = new ArrayList<>();
@@ -61,7 +51,7 @@ public class SiteParser extends RecursiveAction {
             if (path.startsWith("http")) {
                 path = path.replace(site.getUrl(), "");
             }
-            if (pageRepository.isPageSaved(path, site)) continue;
+            if (siteParserData.getDataSaver().isPageSaved(path, site)) continue;
             SiteParser parser = new SiteParser(path, site, siteParserData);
             parsers.add(parser);
 
@@ -84,20 +74,29 @@ public class SiteParser extends RecursiveAction {
             if (e instanceof HttpStatusException) {
                 int statusCode = ((HttpStatusException) e).getStatusCode();
                 if (statusCode == 403 && site.getUrl().equals(uri)) {
-                    siteRepository.update(site, SiteStatus.FAILED, "Ошибка индексации: требуется авторизация");
+                    site.setStatus(SiteStatus.FAILED);
+                    site.setStatusTime(LocalDateTime.now());
+                    site.setLastError("Ошибка индексации: требуется авторизация");
+                    siteParserData.getDataSaver().updateSite(site);
                     this.completeExceptionally(null);
                 }
-                savePage(statusCode);
+                savePage(statusCode, true);
             }
             if (e instanceof UnknownHostException) {
-                siteRepository.update(site, SiteStatus.FAILED, "Ошибка подключиня: указан не верный хост");
+                site.setStatus(SiteStatus.FAILED);
+                site.setStatusTime(LocalDateTime.now());
+                site.setLastError("Ошибка подключиня: указан не верный хост");
+                siteParserData.getDataSaver().updateSite(site);
                 this.completeExceptionally(null);
             }
             if (e instanceof SocketTimeoutException) {
                 String errorMessage = uri.equals(site.getUrl())
                         ? "Ошибка индексации: главная страница сайта не доступна"
                         : "Ошибка индексации: страница не доступна";
-                siteRepository.update(site, SiteStatus.FAILED, errorMessage);
+                site.setStatus(SiteStatus.FAILED);
+                site.setStatusTime(LocalDateTime.now());
+                site.setLastError(errorMessage);
+                siteParserData.getDataSaver().updateSite(site);
             }
             logger.warn("Failed to connect to page: " + uri + " - " + e.getMessage());
             return false;
@@ -110,39 +109,40 @@ public class SiteParser extends RecursiveAction {
         return path.startsWith("/") || path.startsWith(site.getUrl());
     }
 
-    private Page savePage(int statusCode) {
+    private Page savePage(int statusCode, boolean isFailed) {
         Page page = new Page();
+        page.setCode(statusCode);
         page.setSite(site);
         page.setPath(path.length() > 0 ? path : "/");
-        page.setCode(statusCode);
         page.setContent(Objects.isNull(document) ? "<Default Content>" : document.toString());
-        page = pageRepository.savePage(page);
-        if (Objects.nonNull(page)) siteRepository.update(
-                site,
-                IndexingServiceImpl.isIndexingStarted() ? SiteStatus.INDEXING : site.getStatus(),
-                site.getLastError());
+        if (siteParserData.getDataSaver().isPageSaved(path, site)) return null;
+        site.setStatusTime(LocalDateTime.now());
+        site.setStatus(SiteStatus.INDEXING);
+        siteParserData.getDataSaver().updateSite(site);
+        if (isFailed) siteParserData.getDataSaver().saveIndexingData(page, new ArrayList<>());
         return page;
     }
 
     public boolean indexPage() {
-        if (!connect() && !IndexingServiceImpl.isIndexingStarted()) return false;
-        Page page = savePage(document.connection().response().statusCode());
+        if (!connect()) return false;
+        Page page = savePage(document.connection().response().statusCode(), false);
         if (Objects.isNull(page)) return false;
         Lemmatizer lemmatizer = new Lemmatizer();
         String text = lemmatizer.deleteHtmlTags(document);
         Map<String, Integer> lemmas = lemmatizer.lemmatize(text);
+        List<Lemma> lemmaList = new LinkedList<>();
         for (String l : lemmas.keySet()) {
             Lemma lemma = new Lemma();
             lemma.setSite(site);
             lemma.setLemma(l);
             lemma.setFrequency(1);
-            lemmaRepository.save(lemma);
             Index index = new Index();
             index.setPage(page);
-            index.setLemma(lemma);
             index.setRank(lemmas.get(l));
-            indexRepository.save(index);
+            lemma.addIndex(index);
+            lemmaList.add(lemma);
         }
+        siteParserData.getDataSaver().saveIndexingData(page, lemmaList);
         return true;
     }
 }

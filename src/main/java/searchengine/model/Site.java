@@ -1,19 +1,18 @@
 package searchengine.model;
 
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
 import javax.persistence.*;
+import java.io.Serializable;
 import java.time.LocalDateTime;
-import java.util.Set;
+import java.util.Objects;
 
 @Getter
 @Setter
 @Entity
 @Table(name = "site")
-@EqualsAndHashCode(exclude = {"status", "statusTime", "lastError", "pages"})
-public class Site {
+public class Site implements Serializable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -35,6 +34,16 @@ public class Site {
     @Column(nullable = false)
     private String name;
 
-    @OneToMany(mappedBy = "site", cascade = CascadeType.REMOVE)
-    private Set<Page> pages;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Site site = (Site) o;
+        return id == site.id && status == site.status && Objects.equals(lastError, site.lastError) && Objects.equals(url, site.url) && Objects.equals(name, site.name);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, status, lastError, url, name);
+    }
 }

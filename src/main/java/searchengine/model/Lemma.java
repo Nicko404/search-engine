@@ -6,6 +6,9 @@ import org.hibernate.annotations.SQLInsert;
 
 import javax.persistence.*;
 import javax.persistence.Index;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 @Getter
@@ -14,7 +17,7 @@ import java.util.Objects;
 @Table(name = "lemma", indexes = @Index(name = "site_lemma_index", columnList = "lemma, site_id", unique = true))
 @SQLInsert(sql = "insert into lemma (frequency, lemma, site_id) values (?, ?, ?) on duplicate key update " +
         "frequency = lemma.frequency + 1")
-public class Lemma {
+public class Lemma implements Serializable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -27,9 +30,16 @@ public class Lemma {
     @Column(nullable = false)
     private String lemma;
 
-
     @Column(nullable = false)
     private int frequency;
+
+    @OneToMany(mappedBy = "lemma", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<searchengine.model.Index> indexes = new ArrayList<>();
+
+    public void addIndex(searchengine.model.Index index) {
+        indexes.add(index);
+        index.setLemma(this);
+    }
 
     @Override
     public boolean equals(Object o) {
