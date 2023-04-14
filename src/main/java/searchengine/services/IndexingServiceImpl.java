@@ -10,9 +10,11 @@ import org.springframework.stereotype.Service;
 import searchengine.config.SiteParserData;
 import searchengine.config.SitesList;
 import searchengine.dto.indexing.IndexingResponse;
+import searchengine.dto.search.SearchData;
 import searchengine.dto.search.SearchResponse;
 import searchengine.model.*;
 import searchengine.utils.DataSaver;
+import searchengine.utils.Lemmatizer;
 import searchengine.utils.SiteParser;
 
 import java.time.LocalDateTime;
@@ -27,7 +29,7 @@ import java.util.concurrent.TimeUnit;
 public class IndexingServiceImpl implements IndexingService {
 
     @Getter
-    private static boolean indexingStarted = false;
+    private static volatile boolean indexingStarted = false;
     private final SitesList sites;
     private final DataSaver dataSaver;
     private final SiteParserData siteParserData;
@@ -65,7 +67,6 @@ public class IndexingServiceImpl implements IndexingService {
             return response;
         }
         indexingStarted = false;
-        dataSaver.flush();
         for (ForkJoinPool pool : new HashSet<>(poolParserMap.keySet())) {
             pool.shutdown();
             Site site = poolParserMap.get(pool).getSite();
@@ -77,6 +78,7 @@ public class IndexingServiceImpl implements IndexingService {
             poolParserMap.remove(pool);
         }
         service.shutdown();
+        dataSaver.flush();
         response.setResult(true);
         return response;
     }
@@ -89,18 +91,19 @@ public class IndexingServiceImpl implements IndexingService {
             url = siteUrlToBaseForm(url);
             String path = url.substring(siteUrlToBaseForm(siteConf.getUrl()).length());
             Optional<Site> siteOptional = dataSaver.findSiteByUrl(url.substring(0, url.length() - path.length()));
-            Site site = siteOptional.orElse(saveSite(siteConf));
+            Site site = siteOptional.orElseGet(() -> saveSite(siteConf));
             Optional<Page> pageOptional = dataSaver.findPageByPathAndSite(path, site);
             if (pageOptional.isPresent()) {
                 Page page = pageOptional.get();
                 List<Lemma> lemmaList = dataSaver.removeIndexByPage(page);
-                lemmaList.forEach(lemma -> dataSaver.decrementLemmaFrequencyByLemmaId(lemma.getId()));
+                dataSaver.decrementLemmaFrequencyByLemmaId(lemmaList);
                 dataSaver.removeLemmaIfFrequencyIsZero();
                 dataSaver.removePageByPathAndSite(path, site);
                 dataSaver.removePathFromMap(page);
             }
             SiteParser parser = new SiteParser(path, site, siteParserData);
             if (parser.indexPage()) {
+                if (!indexingStarted) dataSaver.flush();
                 response.setResult(true);
                 return response;
             }
@@ -116,55 +119,53 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public SearchResponse search(String site, String query) {
-//        Lemmatizer lemmatizer = new Lemmatizer();
-//        Set<String> queryLemmas = lemmatizer.lemmatize(query).keySet();
-//        Site siteObj = siteParserData.getSiteRepository().findByUrl(site);
-//        List<Lemma> lemmaList = siteParserData.getLemmaRepository().findByLemmaListAndSite(queryLemmas, siteObj);
-//        lemmaList.sort(Comparator.comparingInt(Lemma::getFrequency));
-//        List<Page> pageList;
-//        Set<Page> result = new HashSet<>();
-//        if (Objects.isNull(siteObj)) {
-//            pageList = siteParserData.getIndexRepository().findByLemmaStr(lemmaList.get(0)).stream()
-//                    .map(Index::getPage).toList();
-//            for (Lemma lemma : lemmaList) {
-//                result.clear();
-//                for (Page page : pageList) {
-//                    if (siteParserData.getIndexRepository().existsByLemmaStrAndPage(lemma.getLemma(), page)) {
-//                        result.add(page);
-//                    }
-//                }
-//                pageList = new ArrayList<>(result);
-//            }
-//        } else {
-//            pageList = siteParserData.getIndexRepository().findByLemmaAndSite(lemmaList.get(0), siteObj).stream()
-//                    .map(Index::getPage).toList();
-//            for (Lemma lemma : lemmaList) {
-//                result.clear();
-//                for (Page page : pageList) {
-//                    if (siteParserData.getIndexRepository().existsByLemmaIdAndPage(lemma, page)) {
-//                        result.add(page);
-//                    }
-//                }
-//                pageList = new ArrayList<>(result);
-//            }
-//        }
-//        SearchResponse response = new SearchResponse();
-//        response.setResult(true);
-//        response.setCount(result.size());
-//        response.setData(new ArrayList<>());
-//        for (Page page : result) {
-//            SearchData data = new SearchData();
-//            data.setUri(page.getPath());
-//            data.setSite(page.getSite().getUrl());
-//            data.setSiteName(page.getSite().getName());
-//            data.setTitle(selectTitle(page.getContent()));
-//            data.setSnippet(selectSnippet(page.getContent(), query.split("\\s")));
-//            data.setRelevance(calculateRelevance(page, lemmaList));
-//            response.getData().add(data);
-//        }
-//        response.getData().sort((d1, d2) -> (int) (d2.getRelevance() - d1.getRelevance()));
-//        return response;
-        return null;
+        Lemmatizer lemmatizer = new Lemmatizer();
+        Set<String> queryLemmas = lemmatizer.lemmatize(query).keySet();
+        Site siteObj = dataSaver.findSiteByUrl(site).orElse(null);
+        List<Lemma> lemmaList = dataSaver.findLemmaByLemmaListAndSite(queryLemmas, siteObj);
+        List<Page> pageList;
+        Set<Page> result = new HashSet<>();
+        if (Objects.isNull(siteObj)) {
+            pageList = dataSaver.findIndexByLemmaString(lemmaList.get(0).getLemma()).stream()
+                    .map(Index::getPage).toList();
+            for (Lemma lemma : lemmaList) {
+                result.clear();
+                for (Page page : pageList) {
+                    if (dataSaver.indexExistsByLemmaStringAndPage(lemma.getLemma(), page)) {
+                        result.add(page);
+                    }
+                }
+                pageList = new ArrayList<>(result);
+            }
+        } else {
+            pageList = dataSaver.findIndexByLemmaAndSite(lemmaList.get(0), siteObj).stream()
+                    .map(Index::getPage).toList();
+            for (Lemma lemma : lemmaList) {
+                result.clear();
+                for (Page page : pageList) {
+                    if (dataSaver.indexExistsByLemmaAndPage(lemma, page)) {
+                        result.add(page);
+                    }
+                }
+                pageList = new ArrayList<>(result);
+            }
+        }
+        SearchResponse response = new SearchResponse();
+        response.setResult(true);
+        response.setCount(result.size());
+        response.setData(new ArrayList<>());
+        for (Page page : result) {
+            SearchData data = new SearchData();
+            data.setUri(page.getPath());
+            data.setSite(page.getSite().getUrl());
+            data.setSiteName(page.getSite().getName());
+            data.setTitle(selectTitle(page.getContent()));
+            data.setSnippet(selectSnippet(page.getContent(), query.split("\\s")));
+            data.setRelevance(calculateRelevance(page, lemmaList));
+            response.getData().add(data);
+        }
+        response.getData().sort((d1, d2) -> (int) (d2.getRelevance() - d1.getRelevance()));
+        return response;
     }
 
     private String selectTitle(String content) {
@@ -191,14 +192,15 @@ public class IndexingServiceImpl implements IndexingService {
         return null;
     }
 
-//    private float calculateRelevance(Page page, List<Lemma> lemmaList) {
+    private float calculateRelevance(Page page, List<Lemma> lemmaList) {
 //        List<Index> indexList = siteParserData.getIndexRepository().findByPageAndLemmaList(page, lemmaList);
-//        float result = 0f;
-//        for (Index index : indexList) {
-//            result += index.getRank();
-//        }
-//        return result;
-//    }
+        List<Index> indexList = dataSaver.findIndexByPageAndLemmaList(page, lemmaList);
+        float result = 0f;
+        for (Index index : indexList) {
+            result += index.getRank();
+        }
+        return result;
+    }
 
     private searchengine.config.Site configContainsUrl(String url) {
         for (searchengine.config.Site site : sites.getSites()) {

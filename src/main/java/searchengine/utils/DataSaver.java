@@ -2,6 +2,7 @@ package searchengine.utils;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import searchengine.model.Index;
 import searchengine.model.Lemma;
 import searchengine.model.Page;
 import searchengine.model.Site;
@@ -43,6 +44,32 @@ public class DataSaver {
         siteRepository.update(site.getStatus(), site.getStatusTime(), site.getLastError(), site.getId());
     }
 
+    public List<Lemma> findLemmaByLemmaListAndSite(Set<String> lemmaString, Site site) {
+        return Objects.isNull(site) ?
+                lemmaRepository.findByLemmaList(lemmaString) :
+                lemmaRepository.findByLemmaListAndSite(lemmaString, site);
+    }
+
+    public List<Index> findIndexByLemmaString(String lemma) {
+        return indexRepository.findByLemmaString(lemma);
+    }
+
+    public List<Index> findIndexByLemmaAndSite(Lemma lemma, Site site) {
+        return indexRepository.findByLemmaAndSite(lemma, site);
+    }
+
+    public boolean indexExistsByLemmaAndPage(Lemma lemma, Page page) {
+        return indexRepository.countByLemmaAndPage(lemma, page) > 0;
+    }
+
+    public List<Index> findIndexByPageAndLemmaList(Page page, List<Lemma> lemmaList) {
+        return indexRepository.findByPageAndLemmaList(page, lemmaList);
+    }
+
+    public boolean indexExistsByLemmaStringAndPage(String lemma, Page page) {
+        return indexRepository.countByLemmaStringAndPage(lemma, page) > 0;
+    }
+
     public boolean isPageSaved(String path, Site site) {
         Set<String> paths = sitePaths.get(site);
         return !(Objects.isNull(paths) || !paths.contains(path));
@@ -65,7 +92,7 @@ public class DataSaver {
         }
     }
 
-    public void flush() {
+    public synchronized void flush() {
         try {
             pageRepository.saveAll(pageList);
             lemmaRepository.saveAll(lemmaList);
@@ -97,16 +124,16 @@ public class DataSaver {
         lemmaRepository.removeIfFrequencyIsZero();
     }
 
-    public void decrementLemmaFrequencyByLemmaId(int id) {
-        lemmaRepository.decrementFrequencyById(id);
+    public void decrementLemmaFrequencyByLemmaId(List<Lemma> lemmaList) {
+        lemmaRepository.decrementFrequencyById(lemmaList);
     }
 
-    public int countLemma() {
-        return (int) lemmaRepository.count();
+    public int countLemmaBySite(Site site) {
+        return lemmaRepository.countBySite(site);
     }
 
-    public int countPage() {
-        return (int) pageRepository.count();
+    public int countPageBySite(Site site) {
+        return pageRepository.countBySite(site);
     }
 
     public void clear(Site site) {

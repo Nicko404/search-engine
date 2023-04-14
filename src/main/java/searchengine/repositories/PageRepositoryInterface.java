@@ -23,4 +23,6 @@ public interface PageRepositoryInterface extends CrudRepository<Page, Integer> {
     @Modifying
     @Transactional
     void removeByPathAndSite(String path, Site site);
+
+    int countBySite(Site site);
 }
