@@ -10,10 +10,12 @@ import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.dto.statistics.TotalStatistics;
 import searchengine.model.Site;
 
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -31,19 +33,11 @@ public class StatisticsServiceImpl implements StatisticsService {
 
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
         for (searchengine.config.Site siteConf : sites.getSites()) {
-            Site site = siteParserData.getDataSaver().findSiteByUrl(siteConf.getUrl()).orElse(new Site());
-            DetailedStatisticsItem item = new DetailedStatisticsItem();
-            item.setName(site.getName());
-            item.setUrl(site.getUrl());
-            int pages = siteParserData.getDataSaver().countPageBySite(site);
-            int lemmas = siteParserData.getDataSaver().countLemmaBySite(site);
-            item.setPages(pages);
-            item.setLemmas(lemmas);
-            item.setStatus(site.getStatus().toString());
-            item.setError(site.getLastError());
-            item.setStatusTime(ZonedDateTime.of(site.getStatusTime(), ZoneId.systemDefault()).toInstant().toEpochMilli());
-            total.setPages(total.getPages() + pages);
-            total.setLemmas(total.getLemmas() + lemmas);
+            DetailedStatisticsItem item;
+            Optional<Site> siteOptional = siteParserData.getDataSaver().findSiteByUrl(siteConf.getUrl());
+            item = siteOptional.map(this::createStatisticsItemFromDBSite).orElseGet(() -> createStatisticsItemFromSiteConf(siteConf));
+            total.setPages(total.getPages() + item.getPages());
+            total.setLemmas(total.getLemmas() + item.getLemmas());
             detailed.add(item);
         }
         StatisticsResponse response = new StatisticsResponse();
@@ -53,5 +47,29 @@ public class StatisticsServiceImpl implements StatisticsService {
         response.setStatistics(data);
         response.setResult(true);
         return response;
+    }
+
+    private DetailedStatisticsItem createStatisticsItemFromDBSite(Site site) {
+        DetailedStatisticsItem item = new DetailedStatisticsItem();
+        item.setName(site.getName());
+        item.setUrl(site.getUrl());
+        item.setPages(siteParserData.getDataSaver().countPageBySite(site));
+        item.setLemmas(siteParserData.getDataSaver().countLemmaBySite(site));
+        item.setStatus(site.getStatus().toString());
+        item.setError(site.getLastError());
+        item.setStatusTime(ZonedDateTime.of(site.getStatusTime(), ZoneId.systemDefault()).toInstant().toEpochMilli());
+        return item;
+    }
+
+    private DetailedStatisticsItem createStatisticsItemFromSiteConf(searchengine.config.Site site) {
+        DetailedStatisticsItem item = new DetailedStatisticsItem();
+        item.setName(site.getName());
+        item.setUrl(site.getUrl());
+        item.setPages(0);
+        item.setLemmas(0);
+        item.setStatus("DON'T INDEXING");
+        item.setError("");
+        item.setStatusTime(ZonedDateTime.of(LocalDateTime.now(), ZoneId.systemDefault()).toInstant().toEpochMilli());
+        return item;
     }
 }

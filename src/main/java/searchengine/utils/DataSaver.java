@@ -23,7 +23,7 @@ public class DataSaver {
     private final IndexRepositoryInterface indexRepository;
     private final LemmaRepositoryInterface lemmaRepository;
     private final Map<Site, Set<String>> sitePaths = new ConcurrentHashMap<>();
-    private final List<Page> pageList = Collections.synchronizedList(new LinkedList<>());
+    private final Set<Page> pageList = Collections.synchronizedSet(new HashSet<>(110, 1));
     private final Set<Lemma> lemmaList = Collections.synchronizedSet(new HashSet<>());
     private final Object o = new Object();
 
@@ -84,22 +84,36 @@ public class DataSaver {
             sitePaths.put(page.getSite(), paths);
         }
         synchronized (o) {
-            if (paths.add(page.getPath())) {
-                pageList.add(page);
-                this.lemmaList.addAll(lemmaList);
+            if (paths.add(page.getPath()) && pageList.add(page)) {
+                addLemmas(lemmaList);
                 if (pageList.size() >= 100) flush();
             }
         }
     }
 
-    public synchronized void flush() {
-        try {
-            pageRepository.saveAll(pageList);
-            lemmaRepository.saveAll(lemmaList);
-            lemmaList.clear();
-            pageList.clear();
-        } catch (Exception e) {
-            e.printStackTrace();
+    private void addLemmas(List<Lemma> lemmaList) {
+        for (Lemma lemma : lemmaList) {
+            if (!this.lemmaList.add(lemma)) {
+                for (Lemma target : this.lemmaList) {
+                    if (target.equals(lemma)) {
+                        target.setFrequency(target.getFrequency() + 1);
+                        lemma.getIndexes().forEach(target::addIndex);
+                    }
+                }
+            }
+        }
+    }
+
+    public void flush() {
+        synchronized (o) {
+            try {
+                pageRepository.saveAll(pageList);
+                lemmaRepository.saveAll(lemmaList);
+                lemmaList.clear();
+                pageList.clear();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 

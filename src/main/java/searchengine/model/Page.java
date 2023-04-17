@@ -1,26 +1,22 @@
 package searchengine.model;
 
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.SQLInsert;
 
 import javax.persistence.*;
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 
 @Getter
 @Setter
 @Entity
 @Table(name = "page", indexes = @javax.persistence.Index(name = "path_index", columnList = "path, site_id", unique = true))
-@SQLInsert(sql = "insert ignore into page (code, content, path, site_id, id) values (?, ?, ?, ?, ?)")
+@SQLInsert(sql = "insert ignore into page (code, content, path, site_id) values (?, ?, ?, ?)")
 public class Page implements Serializable {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "seqGen")
-    @SequenceGenerator(name = "seqGen", sequenceName = "seq", initialValue = 1)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
     @ManyToOne

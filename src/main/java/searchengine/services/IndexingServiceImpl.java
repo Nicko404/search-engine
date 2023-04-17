@@ -46,15 +46,17 @@ public class IndexingServiceImpl implements IndexingService {
             return response;
         }
         indexingStarted = true;
-        for (searchengine.config.Site siteConf : sites.getSites()) {
-            deleteAllSiteData(siteUrlToBaseForm(siteConf.getUrl()));
-            ForkJoinPool pool = new ForkJoinPool();
-            SiteParser parser = new SiteParser("/", saveSite(siteConf), siteParserData);
-            poolParserMap.put(pool, parser);
-            pool.execute(parser);
-        }
+        new Thread(() -> {
+            for (searchengine.config.Site siteConf : sites.getSites()) {
+                deleteAllSiteData(siteUrlToBaseForm(siteConf.getUrl()));
+                ForkJoinPool pool = new ForkJoinPool();
+                SiteParser parser = new SiteParser("/", saveSite(siteConf), siteParserData);
+                poolParserMap.put(pool, parser);
+                pool.execute(parser);
+            }
+            startCheckForEndingIndexing();
+        }).start();
         response.setResult(true);
-        startCheckForEndingIndexing();
         return response;
     }
 
@@ -67,18 +69,25 @@ public class IndexingServiceImpl implements IndexingService {
             return response;
         }
         indexingStarted = false;
-        for (ForkJoinPool pool : new HashSet<>(poolParserMap.keySet())) {
-            pool.shutdown();
-            Site site = poolParserMap.get(pool).getSite();
-            site.setLastError("Индексация остановлена пользователем");
-            site.setStatus(SiteStatus.FAILED);
-            site.setStatusTime(LocalDateTime.now());
-            dataSaver.updateSite(site);
-            dataSaver.clear(site);
-            poolParserMap.remove(pool);
-        }
-        service.shutdown();
-        dataSaver.flush();
+        new Thread(() -> {
+            try {
+                service.shutdown();
+                for (ForkJoinPool pool : new HashSet<>(poolParserMap.keySet())) {
+                    pool.shutdown();
+                    Site site = poolParserMap.get(pool).getSite();
+                    Thread.sleep(3_000);
+                    site.setLastError("Индексация остановлена пользователем");
+                    site.setStatus(SiteStatus.FAILED);
+                    site.setStatusTime(LocalDateTime.now());
+                    dataSaver.updateSite(site);
+                    dataSaver.clear(site);
+                    poolParserMap.remove(pool);
+                }
+                dataSaver.flush();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }).start();
         response.setResult(true);
         return response;
     }
@@ -193,7 +202,6 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     private float calculateRelevance(Page page, List<Lemma> lemmaList) {
-//        List<Index> indexList = siteParserData.getIndexRepository().findByPageAndLemmaList(page, lemmaList);
         List<Index> indexList = dataSaver.findIndexByPageAndLemmaList(page, lemmaList);
         float result = 0f;
         for (Index index : indexList) {

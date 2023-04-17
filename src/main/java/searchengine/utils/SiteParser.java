@@ -40,8 +40,7 @@ public class SiteParser extends RecursiveAction {
     @Override
     protected void compute() {
         if (!IndexingServiceImpl.isIndexingStarted() ||
-                siteParserData.getDataSaver().isPageSaved(path, site) ||
-                !indexPage()) return;
+                siteParserData.getDataSaver().isPageSaved(path, site) || !indexPage()) return;
         Elements aElements = document.getElementsByTag("a");
         document = null;
         List<SiteParser> parsers = new ArrayList<>();

@@ -41,16 +41,16 @@ public class Lemma implements Serializable {
         index.setLemma(this);
     }
 
-    @Override
+        @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Lemma lemma1 = (Lemma) o;
-        return frequency == lemma1.frequency && Objects.equals(site, lemma1.site) && Objects.equals(lemma, lemma1.lemma);
+        return Objects.equals(site, lemma1.site) && Objects.equals(lemma, lemma1.lemma);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(site, lemma, frequency);
+        return Objects.hash(site, lemma);
     }
 }

@@ -13,6 +13,8 @@ spring:
         dialect: org.hibernate.dialect.MySQL8Dialect
         connection:
           isolation: TRANSACTION_SERIALIZABLE
+        jdbc:
+          batch_size: 15_000
     hibernate:
       ddl-auto: update
     show-sql: false
