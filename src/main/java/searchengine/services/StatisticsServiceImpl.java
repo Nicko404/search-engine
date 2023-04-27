@@ -34,7 +34,8 @@ public class StatisticsServiceImpl implements StatisticsService {
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
         for (searchengine.config.Site siteConf : sites.getSites()) {
             DetailedStatisticsItem item;
-            Optional<Site> siteOptional = siteParserData.getDataSaver().findSiteByUrl(siteConf.getUrl());
+            Optional<Site> siteOptional = siteParserData.getDataSaver()
+                    .findSiteByUrl(IndexingServiceImpl.siteUrlToBaseForm(siteConf.getUrl()));
             item = siteOptional.map(this::createStatisticsItemFromDBSite).orElseGet(() -> createStatisticsItemFromSiteConf(siteConf));
             total.setPages(total.getPages() + item.getPages());
             total.setLemmas(total.getLemmas() + item.getLemmas());
@@ -64,7 +65,7 @@ public class StatisticsServiceImpl implements StatisticsService {
     private DetailedStatisticsItem createStatisticsItemFromSiteConf(searchengine.config.Site site) {
         DetailedStatisticsItem item = new DetailedStatisticsItem();
         item.setName(site.getName());
-        item.setUrl(site.getUrl());
+        item.setUrl(IndexingServiceImpl.siteUrlToBaseForm(site.getUrl()));
         item.setPages(0);
         item.setLemmas(0);
         item.setStatus("DON'T INDEXING");

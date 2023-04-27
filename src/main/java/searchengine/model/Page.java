@@ -6,12 +6,14 @@ import org.hibernate.annotations.SQLInsert;
 
 import javax.persistence.*;
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 @Getter
 @Setter
 @Entity
-@Table(name = "page", indexes = @javax.persistence.Index(name = "path_index", columnList = "path, site_id", unique = true))
+@Table(name = "page", uniqueConstraints = {@UniqueConstraint(columnNames = {"path", "site_id"}, name = "path_site_index")})
 @SQLInsert(sql = "insert ignore into page (code, content, path, site_id) values (?, ?, ?, ?)")
 public class Page implements Serializable {
 
@@ -31,6 +33,9 @@ public class Page implements Serializable {
 
     @Column(columnDefinition = "MEDIUMTEXT", nullable = false)
     private String content;
+
+    @OneToMany(mappedBy = "page", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    private List<Index> indexes = new ArrayList<>();
 
     @Override
     public boolean equals(Object o) {

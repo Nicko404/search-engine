@@ -8,12 +8,22 @@ import org.springframework.transaction.annotation.Transactional;
 import searchengine.model.Page;
 import searchengine.model.Site;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface PageRepositoryInterface extends CrudRepository<Page, Integer> {
+public interface PageRepository extends CrudRepository<Page, Integer> {
+
+    @Query(value = "from Page p join Index i on i.page = p join Lemma l on i.lemma = l where l.lemma = :lemma")
+    Optional<List<Page>> findByLemma(String lemma);
+
+    @Query(value = "from Page p join Index i on i.page = p join Lemma l on i.lemma = l " +
+            "where l.lemma = :lemma and l.site = :site")
+    Optional<List<Page>> findByLemmaAndSite(String lemma, Site site);
 
     Optional<Page> findByPathAndSite(String path, Site site);
+
+    boolean existsByPathAndSite(String path, Site site);
 
     @Modifying
     @Transactional

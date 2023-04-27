@@ -20,7 +20,7 @@ public class Site implements Serializable {
 
     @Enumerated(EnumType.STRING)
     @Column(columnDefinition = "ENUM('INDEXING', 'INDEXED', 'FAILED')", nullable = false)
-    private SiteStatus status;
+    private Site.Status status;
 
     @Column(name = "status_time", columnDefinition = "DATETIME", nullable = false)
     private LocalDateTime statusTime;
@@ -45,5 +45,11 @@ public class Site implements Serializable {
     @Override
     public int hashCode() {
         return Objects.hash(id, status, lastError, url, name);
+    }
+
+    public enum Status {
+        INDEXING,
+        INDEXED,
+        FAILED
     }
 }

@@ -10,7 +10,7 @@ import searchengine.model.Site;
 import java.util.List;
 import java.util.Set;
 
-public interface LemmaRepositoryInterface extends CrudRepository<Lemma, Integer> {
+public interface LemmaRepository extends CrudRepository<Lemma, Integer> {
 
     @Query(value = "from Lemma l where l.site = :site and l.lemma in (:lemmaList) order by l.frequency")
     List<Lemma> findByLemmaListAndSite(Set<String> lemmaList, Site site);

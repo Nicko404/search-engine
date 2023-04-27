@@ -12,4 +12,6 @@ public class SearchResponse {
     private int count;
 
     private List<SearchData> data;
+
+    private String error;
 }

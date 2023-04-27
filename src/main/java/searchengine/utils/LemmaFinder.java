@@ -7,22 +7,23 @@ import org.jsoup.nodes.Document;
 import java.io.IOException;
 import java.util.*;
 
-public class Lemmatizer {
+public class LemmaFinder {
 
-    private final Map<String, Integer> result;
-    private LuceneMorphology morphology;
-    private final String[] PARTS_OF_SPEECH = {"СОЮЗ", "ПРЕДЛ", "МС", "КР_ПРИЛ", "МЕЖД", "ДЕЕПРИЧАСТИЕ", "L С"};
+    private static final LuceneMorphology morphology;
+    private static final String[] PARTS_OF_SPEECH = {"СОЮЗ", "ПРЕДЛ", "МС", "КР_ПРИЛ", "МЕЖД", "ДЕЕПРИЧАСТИЕ", "L С"};
 
-    public Lemmatizer() {
-        result = new HashMap<>();
+    private LemmaFinder() {}
+
+    static {
         try {
             morphology = new RussianLuceneMorphology();
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
-    public Map<String, Integer> lemmatize(String text) {
+    public static Map<String, Integer> findLemma(String text) {
+        Map<String, Integer> result = new HashMap<>();
         String[] words = text.replaceAll("[^А-Яа-я\\s]", "").toLowerCase(Locale.ROOT).trim().split("\\s+");
         for (String word : words) {
             List<String> morphInfo = morphology.getMorphInfo(word);
@@ -36,7 +37,7 @@ public class Lemmatizer {
         return result;
     }
 
-    private boolean morphFilter(String word) {
+    private static boolean morphFilter(String word) {
         for (String s : PARTS_OF_SPEECH) {
             if (word.contains(s)) {
                 return false;
@@ -45,7 +46,7 @@ public class Lemmatizer {
         return true;
     }
 
-    public String deleteHtmlTags(Document document) {
+    public static String deleteHtmlTags(Document document) {
         return document.body().text();
     }
 }

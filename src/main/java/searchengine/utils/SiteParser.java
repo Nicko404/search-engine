@@ -47,13 +47,10 @@ public class SiteParser extends RecursiveAction {
         for (Element element : aElements) {
             String path = element.attr("href");
             if (!isCorrectPath(path)) continue;
-            if (path.startsWith("http")) {
-                path = path.replace(site.getUrl(), "");
-            }
+            if (path.startsWith("http")) path = path.replace(site.getUrl(), "");
             if (siteParserData.getDataSaver().isPageSaved(path, site)) continue;
             SiteParser parser = new SiteParser(path, site, siteParserData);
             parsers.add(parser);
-
         }
         invokeAll(parsers);
     }
@@ -73,29 +70,23 @@ public class SiteParser extends RecursiveAction {
             if (e instanceof HttpStatusException) {
                 int statusCode = ((HttpStatusException) e).getStatusCode();
                 if (statusCode == 403 && site.getUrl().equals(uri)) {
-                    site.setStatus(SiteStatus.FAILED);
-                    site.setStatusTime(LocalDateTime.now());
-                    site.setLastError("Ошибка индексации: требуется авторизация");
-                    siteParserData.getDataSaver().updateSite(site);
+                    siteParserData.getDataSaver().
+                            updateSite(site, Site.Status.FAILED, "Ошибка индексации: требуется авторизация");
                     this.completeExceptionally(null);
                 }
                 savePage(statusCode, true);
             }
             if (e instanceof UnknownHostException) {
-                site.setStatus(SiteStatus.FAILED);
-                site.setStatusTime(LocalDateTime.now());
-                site.setLastError("Ошибка подключиня: указан не верный хост");
-                siteParserData.getDataSaver().updateSite(site);
+                siteParserData.getDataSaver()
+                        .updateSite(site, Site.Status.FAILED, "Ошибка подключиня: указан не верный хост");
                 this.completeExceptionally(null);
             }
             if (e instanceof SocketTimeoutException) {
                 String errorMessage = uri.equals(site.getUrl())
                         ? "Ошибка индексации: главная страница сайта не доступна"
                         : "Ошибка индексации: страница не доступна";
-                site.setStatus(SiteStatus.FAILED);
-                site.setStatusTime(LocalDateTime.now());
-                site.setLastError(errorMessage);
-                siteParserData.getDataSaver().updateSite(site);
+                siteParserData.getDataSaver()
+                                .updateSite(site, Site.Status.FAILED, errorMessage);
             }
             logger.warn("Failed to connect to page: " + uri + " - " + e.getMessage());
             return false;
@@ -116,9 +107,9 @@ public class SiteParser extends RecursiveAction {
         page.setContent(Objects.isNull(document) ? "<Default Content>" : document.toString());
         if (siteParserData.getDataSaver().isPageSaved(path, site)) return null;
         site.setStatusTime(LocalDateTime.now());
-        site.setStatus(SiteStatus.INDEXING);
+        site.setStatus(IndexingServiceImpl.isIndexingStarted() ? Site.Status.INDEXING : Site.Status.INDEXED);
         siteParserData.getDataSaver().updateSite(site);
-        if (isFailed) siteParserData.getDataSaver().saveIndexingData(page, new ArrayList<>());
+        if (isFailed) siteParserData.getDataSaver().saveIndexingData(new ArrayList<>(), page);
         return page;
     }
 
@@ -126,9 +117,8 @@ public class SiteParser extends RecursiveAction {
         if (!connect()) return false;
         Page page = savePage(document.connection().response().statusCode(), false);
         if (Objects.isNull(page)) return false;
-        Lemmatizer lemmatizer = new Lemmatizer();
-        String text = lemmatizer.deleteHtmlTags(document);
-        Map<String, Integer> lemmas = lemmatizer.lemmatize(text);
+        String text = LemmaFinder.deleteHtmlTags(document);
+        Map<String, Integer> lemmas = LemmaFinder.findLemma(text);
         List<Lemma> lemmaList = new LinkedList<>();
         for (String l : lemmas.keySet()) {
             Lemma lemma = new Lemma();
@@ -141,7 +131,7 @@ public class SiteParser extends RecursiveAction {
             lemma.addIndex(index);
             lemmaList.add(lemma);
         }
-        siteParserData.getDataSaver().saveIndexingData(page, lemmaList);
+        siteParserData.getDataSaver().saveIndexingData(lemmaList, page);
         return true;
     }
 }

@@ -11,13 +11,7 @@ import searchengine.model.Site;
 
 import java.util.List;
 
-public interface IndexRepositoryInterface extends CrudRepository<Index, Integer> {
-
-    @Query(value = "from Index i where i.lemma.lemma = :lemma")
-    List<Index> findByLemmaString(String lemma);
-
-    @Query(value = "from Index i where i.lemma = :lemma and i.lemma.site = :site")
-    List<Index> findByLemmaAndSite(Lemma lemma, Site site);
+public interface IndexRepository extends CrudRepository<Index, Integer> {
 
     @Query(value = "select i.lemma from Index i where i.page = :page")
     List<Lemma> findLemmaByPage(Page page);
@@ -32,10 +26,6 @@ public interface IndexRepositoryInterface extends CrudRepository<Index, Integer>
 
     @Modifying
     @Transactional
+    @Query(value = "delete from Index i where i.page = :page")
     void removeByPage(Page page);
-
-    @Query(value = "select count(*) from Index i where i.lemma.lemma = :lemma and i.page = :page")
-    int countByLemmaStringAndPage(String lemma, Page page);
-
-    int countByLemmaAndPage(Lemma lemma, Page page);
 }
