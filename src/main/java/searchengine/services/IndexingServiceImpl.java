@@ -193,7 +193,7 @@ public class IndexingServiceImpl implements IndexingService {
                     .append(content, start, end)
                     .append("...</b> ");
         }
-        if (result.isEmpty()) {
+        if (result.length() == 0) {
             for (String lemma : lemmaList) {
                 if (lemma.length() == 1) continue;
                 if (result.length() > 200) break;
